@@ -222,4 +222,296 @@ plt.figure(figsize = (100,150))
 tree.plot_tree(model,ax=None, fontsize=50)
 plt.show()
 
+#%%
 
+# Accuracies from cross validation
+#cv denotes number of folds
+# output denotes accuracies on the val fold (take average for better representation)
+print(cross_val_score(model, X, y, cv=10))
+
+#%%
+
+cross_val_score(model, X, y, cv=10).mean()
+# we choose none of these models, but rather one model which trains on all the data (when we are satisfied with validation scores)
+
+#%%
+
+pred_label_cv = cross_val_predict(model, X, y, cv=10)
+pred_label_cv
+
+#%%
+
+print("Confusion Matrix", '\n', confusion_matrix(y, pred_label_cv))
+print("Classification Report:", '\n', classification_report(y, pred_label_cv))
+
+#%%
+
+# train a decision tree to train a model based on whole training set
+# (Suppose we are content with validation result)
+model_w = DecisionTreeClassifier()
+model_w.fit(X,y)
+
+#%%
+
+# test evaluation result for 60% train data
+pred_val_train = model_w.predict(X)
+
+print("Accuracy from whole train data:",accuracy_score(y, pred_val_train, normalize=True, sample_weight=None))
+print("Confusion Matrix", '\n', confusion_matrix(y, pred_val_train))
+print("Classification Report:", '\n', classification_report(y, pred_val_train))
+
+#%%
+
+# create an array that holds the max_depth
+# tree is too big, we need to fine-tune some variables
+max_depth = np. linspace(1,32,32, endpoint=True) #<- try out different depth from 1 to 32
+# but be careful not too underfit (depth too low-> learning is not enough)
+# this is pre-tuning (only grow tree to certain depth) vs. post-tuning (cut off after growing big tree)
+
+#%%
+
+# create a loop to try out different depth value
+# test accuracies in the train and test results and build a graph from it
+train_results =[]
+test_results = []
+# create a loop to try out all the number from 1 to 32 for max_depths in a decision tree
+for max_depth_i in max_depth:
+    dt = DecisionTreeClassifier(max_depth=max_depth_i)
+    dt.fit(X_train, y_train)
+    
+    train_pred = dt.predict(X_train)
+    accuracy = accuracy_score(y_train, train_pred, normalize=True, sample_weight=None)
+    train_results.append(accuracy)
+    
+    y_pred = dt.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred, normalize=True, sample_weight=None)
+    test_results.append(accuracy)
+    
+#%%
+
+from matplotlib.legend_handler import HandlerLine2D
+# trend is decreasing for test accuracy (increasing for train)
+# there is an optimum (3 or 4), which will help us fine tune the model
+line1, = plt.plot(max_depth, train_results, 'b', label='Train accuracy')
+line2, = plt.plot(max_depth, test_results, 'r', label='Test accuracy')
+plt.legend(handler_map={line1: HandlerLine2D(numpoints=2)})
+plt.ylabel('Accuracy score')
+plt.xlabel('Tree depth')
+plt.show()
+
+#%%
+
+# Function to plot the results
+def plot_fitting_curves(results):
+    results.plot("min_leaves")
+    plt.ylabel("Accuracy")
+    plt.xlabel("Min samples per leaf (inverse of complexity)")
+    plt.show()
+    
+accuracy_on_train = []
+accuracy_on_test = []
+
+min_leaves = range(1,80,5)
+for m in min_leaves:
+    # the smaller min_samples_leaf the bigger is the tree (f.e leafs wiith only 6 children and grandchildren will not be allowed)
+    model = DecisionTreeClassifier(min_samples_leaf=m, random_state=42)
+    model.fit(X_train, y_train)
+    # Evaluation in the same data used to train the model
+    predictions_train = model.predict(X_train)
+    accuracy_train = accuracy_score(y_train, predictions_train,normalize=True, sample_weight=None)
+    accuracy_on_train.append(accuracy_train)
+    # Evaluation in previously unseen data
+    predictions_test = model.predict(X_test)
+    accuracy_test = accuracy_score(y_test, predictions_test,normalize=True, sample_weight=None)
+    accuracy_on_test.append(accuracy_test)
+    
+results = pd.DataFrame({"min_leaves": min_leaves, "training": accuracy_on_train, "test":accuracy_on_test})
+plot_fitting_curves(results)
+# graph is basically the same as above, however, as the min samples param increases, the train accuracy will decrease (because tree will grow smaller)
+# (Optimum is 42)
+
+# Problem -> Overfitting to the testing data (also data leakage)
+
+#%%
+
+accuracy_on_train = []
+accuracy_on_test = []
+
+# specify criterion = 'entropy'
+# specify max_depth (try out)
+# min_samples_split (try out (probably something bigger than two, minimum))
+# Reminder : min_samples_split specifies the minimum number of samples required to split an internal node, while min_samples_leaf specifies the minimum number of samples required to be at a leaf node.
+# min_impurity_decrease (try out) (probably something bigger than .10)
+
+min_impurity_dec = np.arange(0.0,0.9,0.1)
+for m in min_impurity_dec:
+    # the smaller min_samples_leaf the bigger is the tree (f.e leafs wiith only 6 children and grandchildren will not be allowed)
+    model = DecisionTreeClassifier(min_impurity_decrease=m, random_state=42)
+    model.fit(X_train, y_train)
+    # Evaluation in the same data used to train the model
+    predictions_train = model.predict(X_train)
+    accuracy_train = accuracy_score(y_train, predictions_train,normalize=True, sample_weight=None)
+    accuracy_on_train.append(accuracy_train)
+    # Evaluation in previously unseen data
+    predictions_test = model.predict(X_test)
+    accuracy_test = accuracy_score(y_test, predictions_test,normalize=True, sample_weight=None)
+    accuracy_on_test.append(accuracy_test)
+    
+results = pd.DataFrame({"min_decrease": min_impurity_dec, "training": accuracy_on_train, "test":accuracy_on_test})
+results.plot("min_decrease")
+plt.ylabel("Accuracy")
+plt.xlabel("Min impurity decrease (inverse of complexity)")
+plt.show()
+# graph is basically the same as above, however, as the min samples param increases, the train accuracy will decrease (because tree will grow smaller)
+# (Optimum is 42)
+
+# Problem -> Overfitting to the testing data (also data leakage)
+
+#%%
+
+# Narrow down range of optimal value
+accuracy_on_train = []
+accuracy_on_test = []
+
+# specify criterion = 'entropy'
+# specify max_depth (try out)
+# min_samples_split (try out (probably something bigger than two, minimum))
+# Reminder : min_samples_split specifies the minimum number of samples required to split an internal node, while min_samples_leaf specifies the minimum number of samples required to be at a leaf node.
+# min_impurity_decrease (try out) (probably something bigger than .10)
+
+min_impurity_dec = np.arange(0.0,0.2,0.05)
+for m in min_impurity_dec:
+    # the smaller min_samples_leaf the bigger is the tree (f.e leafs wiith only 6 children and grandchildren will not be allowed)
+    model = DecisionTreeClassifier(min_impurity_decrease=m, random_state=42)
+    model.fit(X_train, y_train)
+    # Evaluation in the same data used to train the model
+    predictions_train = model.predict(X_train)
+    accuracy_train = accuracy_score(y_train, predictions_train,normalize=True, sample_weight=None)
+    accuracy_on_train.append(accuracy_train)
+    # Evaluation in previously unseen data
+    predictions_test = model.predict(X_test)
+    accuracy_test = accuracy_score(y_test, predictions_test,normalize=True, sample_weight=None)
+    accuracy_on_test.append(accuracy_test)
+    
+results = pd.DataFrame({"min_decrease": min_impurity_dec, "training": accuracy_on_train, "test":accuracy_on_test})
+results.plot("min_decrease")
+plt.ylabel("Accuracy")
+plt.xlabel("Min impurity decrease (inverse of complexity)")
+plt.show()
+
+#%%
+
+#Combine the found hyperparameters and test via 10-fold cross validation
+model = DecisionTreeClassifier(min_impurity_decrease=0.1, min_samples_leaf=40, random_state=42)
+print(cross_val_score(model, X, y, cv=10))
+#Achieves around 78% accuracy
+cross_val_score(model, X, y, cv=10).mean()
+
+#%%
+
+model = DecisionTreeClassifier(min_samples_leaf=41, random_state=42)
+print(cross_val_score(model, X, y, cv=10))
+#Achieves around 81.3% accuracy
+cross_val_score(model, X, y, cv=10).mean()
+
+#%%
+
+model = DecisionTreeClassifier(min_impurity_decrease=0.1, random_state=42)
+print(cross_val_score(model, X, y, cv=10))
+#Achieves around 78% accuracy
+cross_val_score(model, X, y, cv=10).mean()
+
+#%%
+
+model = DecisionTreeClassifier(max_depth=3, random_state=42)
+print(cross_val_score(model, X, y, cv=10))
+#Achieves around 81.2% accuracy
+cross_val_score(model, X, y, cv=10).mean()
+
+#%%
+
+# No difference between criterions
+model = DecisionTreeClassifier(criterion='entropy', min_samples_leaf=41)
+print(cross_val_score(model, X, y, cv=10))
+#Achieves around 81% accuracy
+cross_val_score(model, X, y, cv=10).mean()
+
+#%%
+
+# Use decision tree model with highest accuracy after 10-fold Cross-Validation -> min_samples_leaf=41
+# and train it on the full dataset
+optim_model = DecisionTreeClassifier(min_samples_leaf=41, random_state=42)
+optim_model.fit(X,y)
+
+#%%
+
+from sklearn.model_selection import GridSearchCV
+
+# Alternative approach, use best parameters using GridSearch
+
+#finding best fit with gridsearch
+param_grid = {'min_samples_leaf':np.arange(10,50,5),
+              'min_samples_split':np.arange(10,50,5),
+              'max_depth':np.arange(2,8),
+              'min_weight_fraction_leaf':np.arange(0,0.5,0.1),
+              'criterion':['gini','entropy']}
+clf = tree.DecisionTreeClassifier()
+search = GridSearchCV(clf, param_grid, scoring='average_precision')
+
+search.fit(X,y)
+print("params:",search.best_params_)
+print("estimator :",search.best_estimator_ )
+print("score :",search.best_score_ )
+
+#%%
+
+pred_opt_cv_train = optim_model.predict(X)
+
+#%%
+
+pred_opt_gs_model = DecisionTreeClassifier(criterion='gini', max_depth=6, min_samples_leaf=20, min_samples_split=35, min_weight_fraction_leaf=0.0)
+pred_opt_gs_train = pred_opt_gs_model.fit(X,y).predict(X)
+
+
+#%%
+
+print("Accuracy from whole train data with CV Optimization:",accuracy_score(y, pred_opt_cv_train, normalize=True, sample_weight=None))
+print("Confusion Matrix", '\n', confusion_matrix(y, pred_opt_cv_train))
+print("Classification Report:", '\n', classification_report(y, pred_opt_cv_train))
+
+print("Accuracy from whole train data with GridSearch Optimization:",accuracy_score(y, pred_opt_gs_train, normalize=True, sample_weight=None))
+print("Confusion Matrix", '\n', confusion_matrix(y, pred_opt_gs_train))
+print("Classification Report:", '\n', classification_report(y, pred_opt_gs_train))
+
+#%%
+
+# Yields around 81.5 vs 83.5% accuracy -> Choose Grid Search parameters
+# Predict value on Test Data
+
+pred_opt_gs_test = pred_opt_gs_model.predict(test_df[features])
+
+#%%
+
+test_df['Survived'] = pred_opt_gs_test
+Kaggle_submission = test_df
+Kaggle_submission.drop(['Cabin','Pclass','Age','SibSp','Parch','Fare_zscore','male','Embarked_Q','Embarked_S','Cabin_B','Cabin_C','Cabin_D','Cabin_E','Cabin_F','Cabin_G','Cabin_N','Cabin_T'], axis=1, inplace=True)
+Kaggle_submission.head()
+Kaggle_submission.to_csv("Kaggle_Submission.csv")
+
+#%%
+
+Kaggle_submission.head(20)
+
+#%%
+
+import csv
+
+# Read the CSV file and store the modified data
+with open('Kaggle_Submission.csv', 'r') as file:
+    reader = csv.reader(file)
+    data = [row[1:] for row in reader]  # Remove the first element in each row
+
+# Write the modified data back to the CSV file
+with open('Kaggle_Submission_cleaned.csv', 'w', newline='') as file:
+    writer = csv.writer(file)
+    writer.writerows(data)
