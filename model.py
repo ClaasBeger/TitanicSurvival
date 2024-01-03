@@ -14,12 +14,6 @@ test_df = pd.read_csv("test.csv")
 
 train_df.applymap(np.isreal).all(0)
 
-#%%
-
-# Drop obsolete categories
-
-train_df = train_df.drop(labels=['Name'], axis=1)
-
 
 #%%
 
@@ -101,9 +95,131 @@ test_df.loc[maskLetter, 'Cabin'] = 'N'
 
 test_df.loc[test_df['Cabin'].notnull(),'Cabin'] = test_df['Cabin'].str[0]
 
+#%%
+
+from sklearn import preprocessing
+
+# create a scaler using Z score normalization / Standardization on the Fare attribute
+# The Fare varies greatly, thus we want to normalize this attribute
+zscore_scaler = preprocessing.StandardScaler().fit(train_df[['Fare']])
+
+#Apply the Zscore scaler Fare attribute and assign to a new Zscore column
+train_df['Fare_zscore']=zscore_scaler.transform(train_df[['Fare']])
+
+train_df['Fare_zscore'].describe()
+
+#%%
+
+# get dummy variables for categorical varialbes
+sexdummy = pd.get_dummies(train_df['Sex'], drop_first=True)
+embarkeddummy = pd.get_dummies(train_df['Embarked'],drop_first=True,prefix='Embarked')
+cabindummy = pd.get_dummies(train_df['Cabin'],drop_first=True,prefix='Cabin')
+
+#%%
+
+# adding dummy columns to the existing dataframe
+trainwithdummy = pd.concat([train_df,sexdummy,embarkeddummy,cabindummy],axis=1,sort=True)
+trainwithdummy.info()
+
+#%%
+
+# drop columns that are not needed or have already been encoded
+train_df=trainwithdummy.drop(columns=['Name','Sex','Ticket','Fare','Embarked'])
+
+#%%
+
+# view the updated dataframe
+train_df.head()
+
+#%%
+
+# Apply same discretization and one-hot encoding to the testing set
+
+# Make sure to apply to 
+test_df['Fare_zscore']=zscore_scaler.transform(test_df[['Fare']])
+
+# get dummy variables for categorical varialbes
+sexdummy = pd.get_dummies(test_df['Sex'], drop_first=True)
+embarkeddummy = pd.get_dummies(test_df['Embarked'],drop_first=True,prefix='Embarked')
+cabindummy = pd.get_dummies(test_df['Cabin'],drop_first=True,prefix='Cabin')
+
+testwithdummy = pd.concat([test_df,sexdummy,embarkeddummy,cabindummy],axis=1,sort=True)
+
+# We have to add an empty column for Cabin_T, because there is no given passenger with it in the Test Set
+testwithdummy['Cabin_T'] = 0
+# drop columns that are not needed
+test_df=testwithdummy.drop(columns=['Name','Sex','Ticket','Fare','Embarked'])
+test_df.head()
+
+#%%
+
+# Save cleaned Train and cleaned Testing Data to csv
 
 
+train_df.to_csv('titanic_cleaned')
+test_df.to_csv('titanictest_cleaned')
 
+#%%
 
+# Define Target and Features
+
+# Start building the Decision Tree
+
+# define independent variables / attirbutes / features
+features = ['Pclass','Age','SibSp','Parch','Fare_zscore','male','Embarked_Q','Embarked_S','Cabin_B','Cabin_C','Cabin_D','Cabin_E','Cabin_F','Cabin_G','Cabin_N','Cabin_T']
+# define one single target variable / label
+target = ['Survived']
+
+test_df[features].head()
+
+#%%
+
+# get defined training dataset
+X = train_df[features]
+y = train_df[target]
+
+#%%
+
+# import train split function
+from sklearn.model_selection import train_test_split
+# import libraries for cross validation
+# do the split automatically multiple times via cross validation
+# evenly distribute them into 5 folds (every fold holds more or less equal amount)
+from sklearn.model_selection import cross_val_predict
+from sklearn.model_selection import cross_val_score
+# import evaluation tools
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import classification_report # precision and recall
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import roc_curve, auc
+# import DecisionTreeClassifier
+from sklearn.tree import DecisionTreeClassifier
+
+# split train data into train and test, 60% in training and 40% in testing
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state = 777)
+
+#%%
+
+# define our model by using the default value
+
+# specify criterion = 'entropy'
+# specify max_depth (try out)
+# min_samples_split (try out (probably something bigger than two, minimum))
+# Reminder : min_samples_split specifies the minimum number of samples required to split an internal node,
+# while min_samples_leaf specifies the minimum number of samples required to be at a leaf node.
+# min_impurity_decrease (try out) (probably something bigger than .10)
+# criterion='entropy', min_samples_split=10, min_samples_leaf=10
+model = DecisionTreeClassifier()
+
+model.fit(X_train, y_train)
+
+#%%
+
+from sklearn import tree
+import matplotlib.pyplot as plt
+
+plt.figure(figsize = (100,150))
+tree.plot_tree(model,ax=None, fontsize=50)
+plt.show()
 
 
